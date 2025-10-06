@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cadastro - App Financeiro</title>
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- FontAwesome -->
+  <script src="https://kit.fontawesome.com/a2e0e6ad65.js" crossorigin="anonymous"></script>
+
+  <style>
+    body {
+      background-color: #0f172a;
+      color: #e2e8f0;
+      font-family: 'Inter', sans-serif;
+    }
+    .card {
+      background-color: #1e293b;
+      border-radius: 1rem;
+      box-shadow: 0 0 15px rgba(0,0,0,0.4);
+    }
+    .btn {
+      transition: all 0.3s ease;
+    }
+    .btn:hover {
+      transform: scale(1.02);
+      filter: brightness(1.1);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-6">
+
+  <div class="w-full max-w-sm card p-8">
+    <h1 class="text-3xl font-bold text-center mb-6 text-green-400 flex items-center justify-center gap-2">
+      <i class="fa-solid fa-user-plus"></i> Cadastro
+    </h1>
+
+    <form method="POST" action="/register" class="space-y-4">
+      <input type="text" name="nome" placeholder="Nome completo"
+             class="w-full p-3 rounded-lg bg-slate-800 border border-slate-600 text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-400" required>
+
+      <input type="email" name="email" placeholder="E-mail"
+             class="w-full p-3 rounded-lg bg-slate-800 border border-slate-600 text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-400" required>
+
+      <input type="password" name="senha" placeholder="Senha"
+             class="w-full p-3 rounded-lg bg-slate-800 border border-slate-600 text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-400" required>
+
+      <button type="submit"
+              class="btn w-full bg-green-500 text-black font-bold py-3 rounded-lg hover:bg-green-400">
+        <i class="fa-solid fa-user-check"></i> Cadastrar
+      </button>
+    </form>
+
+    <p class="text-center text-sm text-slate-400 mt-4">
+      Já tem conta?
+      <a href="/login" class="text-green-400 hover:underline">Entrar</a>
+    </p>
+  </div>
+
+</body>
+</html>
