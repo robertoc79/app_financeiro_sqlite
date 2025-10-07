@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, session, url_for
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 
 app = Flask(__name__)
@@ -17,9 +18,12 @@ def get_db_connection():
     )
     return conn
 
+
+# --- Rota principal ---
 @app.route('/')
 def index():
     return redirect(url_for('login'))
+
 
 # --- Cadastro de usuário ---
 @app.route('/register', methods=['GET', 'POST'])
@@ -29,15 +33,24 @@ def register():
         email = request.form['email']
         senha = request.form['senha']
 
+        senha_hash = generate_password_hash(senha)
+
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("INSERT INTO usuarios (nome, email, senha) VALUES (%s, %s, %s)", (nome, email, senha))
-        conn.commit()
-        cur.close()
-        conn.close()
+
+        try:
+            cur.execute("INSERT INTO usuarios (nome, email, senha) VALUES (%s, %s, %s)", (nome, email, senha_hash))
+            conn.commit()
+        except psycopg2.errors.UniqueViolation:
+            conn.rollback()
+            return "E-mail já cadastrado!"
+        finally:
+            cur.close()
+            conn.close()
 
         return redirect(url_for('login'))
     return render_template('register.html')
+
 
 # --- Login ---
 @app.route('/login', methods=['GET', 'POST'])
@@ -48,17 +61,18 @@ def login():
 
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT * FROM usuarios WHERE email=%s AND senha=%s", (email, senha))
+        cur.execute("SELECT * FROM usuarios WHERE email=%s", (email,))
         user = cur.fetchone()
         cur.close()
         conn.close()
 
-        if user:
+        if user and check_password_hash(user['senha'], senha):
             session['usuario_id'] = user['id']
             return redirect(url_for('dashboard'))
         else:
             return "Usuário ou senha incorretos!"
     return render_template('login.html')
+
 
 # --- Dashboard ---
 @app.route('/dashboard')
@@ -77,6 +91,7 @@ def dashboard():
     conn.close()
 
     return render_template('dashboard.html', transacoes=transacoes, saldo=saldo)
+
 
 # --- Adicionar transação ---
 @app.route('/add_transacao', methods=['POST'])
@@ -101,6 +116,7 @@ def add_transacao():
 
     return redirect(url_for('dashboard'))
 
+
 # --- Editar transação ---
 @app.route('/editar/<int:id>', methods=['GET', 'POST'])
 def editar(id):
@@ -117,7 +133,8 @@ def editar(id):
         data = request.form['data']
 
         cur.execute("""
-            UPDATE transacoes SET descricao=%s, valor=%s, tipo=%s, data=%s WHERE id=%s AND usuario_id=%s
+            UPDATE transacoes SET descricao=%s, valor=%s, tipo=%s, data=%s 
+            WHERE id=%s AND usuario_id=%s
         """, (descricao, valor, tipo, data, id, session['usuario_id']))
         conn.commit()
         cur.close()
@@ -130,6 +147,7 @@ def editar(id):
     conn.close()
 
     return render_template('editar.html', transacao=transacao)
+
 
 # --- Excluir transação ---
 @app.route('/excluir/<int:id>')
@@ -146,11 +164,13 @@ def excluir(id):
 
     return redirect(url_for('dashboard'))
 
+
 # --- Logout ---
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('login'))
+
 
 if __name__ == '__main__':
     app.run(debug=True)
