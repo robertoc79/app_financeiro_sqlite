@@ -1,8 +1,8 @@
 from flask import Flask, render_template, request, redirect, session, url_for, flash
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = "chave_segura"
@@ -10,16 +10,15 @@ app.secret_key = "chave_segura"
 # --- Conexão com PostgreSQL (Render) ---
 def get_db_connection():
     conn = psycopg2.connect(
-        host="dpg-d3i65ore5dus738rvqj0-a.oregon-postgres.render.com",
-        database="financeiro_db_3egf",
-        user="financeiro_db_3egf_user",
-        password="B1xUwbejZLJzciefomgyKiyBWJ95fuN3",
+        host="dpg-d3i99ojipnbc73e02mgg-a.oregon-postgres.render.com",
+        database="financeiro_db_df54",
+        user="financeiro_db_df54_user",
+        password="nJOczlaGBRni7mFw5SbnF6jD9l9ejonU",
         sslmode="require"
     )
     return conn
 
 
-# --- Rota principal ---
 @app.route('/')
 def index():
     return redirect(url_for('login'))
@@ -32,16 +31,13 @@ def register():
         nome = request.form['nome']
         email = request.form['email']
         senha = request.form['senha']
-
         senha_hash = generate_password_hash(senha)
 
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
-        # verifica se o email já existe
         cur.execute("SELECT * FROM usuarios WHERE email = %s", (email,))
-        existente = cur.fetchone()
-        if existente:
+        if cur.fetchone():
             flash("E-mail já cadastrado. Faça login.", "warning")
             cur.close()
             conn.close()
@@ -91,16 +87,15 @@ def dashboard():
 
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT * FROM transacoes WHERE usuario_id=%s ORDER BY data DESC",
-                (session['usuario_id'],))
+    cur.execute("SELECT * FROM transacoes WHERE usuario_id=%s ORDER BY data DESC", (session['usuario_id'],))
     transacoes = cur.fetchall()
-    cur.close()
-    conn.close()
 
     saldo = sum([t['valor'] if t['tipo'] == 'entrada' else -t['valor'] for t in transacoes])
 
-    return render_template('dashboard.html', transacoes=transacoes, saldo=saldo,
-                           usuario=session.get('usuario_nome'))
+    cur.close()
+    conn.close()
+
+    return render_template('dashboard.html', transacoes=transacoes, saldo=saldo, usuario=session.get('usuario_nome'))
 
 
 # --- Adicionar transação ---
@@ -116,10 +111,10 @@ def add_transacao():
 
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("""
-        INSERT INTO transacoes (usuario_id, descricao, valor, tipo, data)
-        VALUES (%s, %s, %s, %s, %s)
-    """, (session['usuario_id'], descricao, valor, tipo, data))
+    cur.execute(
+        "INSERT INTO transacoes (usuario_id, descricao, valor, tipo, data) VALUES (%s, %s, %s, %s, %s)",
+        (session['usuario_id'], descricao, valor, tipo, data)
+    )
     conn.commit()
     cur.close()
     conn.close()
@@ -144,7 +139,7 @@ def editar(id):
         data = request.form['data']
 
         cur.execute("""
-            UPDATE transacoes SET descricao=%s, valor=%s, tipo=%s, data=%s
+            UPDATE transacoes SET descricao=%s, valor=%s, tipo=%s, data=%s 
             WHERE id=%s AND usuario_id=%s
         """, (descricao, valor, tipo, data, id, session['usuario_id']))
         conn.commit()
@@ -153,8 +148,7 @@ def editar(id):
         flash("Transação atualizada!", "info")
         return redirect(url_for('dashboard'))
 
-    cur.execute("SELECT * FROM transacoes WHERE id=%s AND usuario_id=%s",
-                (id, session['usuario_id']))
+    cur.execute("SELECT * FROM transacoes WHERE id=%s AND usuario_id=%s", (id, session['usuario_id']))
     transacao = cur.fetchone()
     cur.close()
     conn.close()
@@ -170,8 +164,7 @@ def excluir(id):
 
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("DELETE FROM transacoes WHERE id=%s AND usuario_id=%s",
-                (id, session['usuario_id']))
+    cur.execute("DELETE FROM transacoes WHERE id=%s AND usuario_id=%s", (id, session['usuario_id']))
     conn.commit()
     cur.close()
     conn.close()
