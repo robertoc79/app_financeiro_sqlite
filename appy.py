@@ -1,8 +1,8 @@
-from flask import Flask, render_template, request, redirect, session, url_for
+from flask import Flask, render_template, request, redirect, session, url_for, flash
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.secret_key = "chave_segura"
@@ -36,19 +36,26 @@ def register():
         senha_hash = generate_password_hash(senha)
 
         conn = get_db_connection()
-        cur = conn.cursor()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
 
-        try:
-            cur.execute("INSERT INTO usuarios (nome, email, senha) VALUES (%s, %s, %s)", (nome, email, senha_hash))
-            conn.commit()
-        except psycopg2.errors.UniqueViolation:
-            conn.rollback()
-            return "E-mail já cadastrado!"
-        finally:
+        # verifica se o email já existe
+        cur.execute("SELECT * FROM usuarios WHERE email = %s", (email,))
+        existente = cur.fetchone()
+        if existente:
+            flash("E-mail já cadastrado. Faça login.", "warning")
             cur.close()
             conn.close()
+            return redirect(url_for('login'))
 
+        cur.execute("INSERT INTO usuarios (nome, email, senha) VALUES (%s, %s, %s)",
+                    (nome, email, senha_hash))
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        flash("Usuário cadastrado com sucesso!", "success")
         return redirect(url_for('login'))
+
     return render_template('register.html')
 
 
@@ -68,9 +75,11 @@ def login():
 
         if user and check_password_hash(user['senha'], senha):
             session['usuario_id'] = user['id']
+            session['usuario_nome'] = user['nome']
             return redirect(url_for('dashboard'))
         else:
-            return "Usuário ou senha incorretos!"
+            flash("Usuário ou senha incorretos!", "danger")
+
     return render_template('login.html')
 
 
@@ -82,15 +91,16 @@ def dashboard():
 
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT * FROM transacoes WHERE usuario_id=%s ORDER BY data DESC", (session['usuario_id'],))
+    cur.execute("SELECT * FROM transacoes WHERE usuario_id=%s ORDER BY data DESC",
+                (session['usuario_id'],))
     transacoes = cur.fetchall()
-
-    saldo = sum([t['valor'] if t['tipo'] == 'entrada' else -t['valor'] for t in transacoes])
-
     cur.close()
     conn.close()
 
-    return render_template('dashboard.html', transacoes=transacoes, saldo=saldo)
+    saldo = sum([t['valor'] if t['tipo'] == 'entrada' else -t['valor'] for t in transacoes])
+
+    return render_template('dashboard.html', transacoes=transacoes, saldo=saldo,
+                           usuario=session.get('usuario_nome'))
 
 
 # --- Adicionar transação ---
@@ -106,14 +116,15 @@ def add_transacao():
 
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO transacoes (usuario_id, descricao, valor, tipo, data) VALUES (%s, %s, %s, %s, %s)",
-        (session['usuario_id'], descricao, valor, tipo, data)
-    )
+    cur.execute("""
+        INSERT INTO transacoes (usuario_id, descricao, valor, tipo, data)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (session['usuario_id'], descricao, valor, tipo, data))
     conn.commit()
     cur.close()
     conn.close()
 
+    flash("Transação adicionada com sucesso!", "success")
     return redirect(url_for('dashboard'))
 
 
@@ -133,15 +144,17 @@ def editar(id):
         data = request.form['data']
 
         cur.execute("""
-            UPDATE transacoes SET descricao=%s, valor=%s, tipo=%s, data=%s 
+            UPDATE transacoes SET descricao=%s, valor=%s, tipo=%s, data=%s
             WHERE id=%s AND usuario_id=%s
         """, (descricao, valor, tipo, data, id, session['usuario_id']))
         conn.commit()
         cur.close()
         conn.close()
+        flash("Transação atualizada!", "info")
         return redirect(url_for('dashboard'))
 
-    cur.execute("SELECT * FROM transacoes WHERE id=%s AND usuario_id=%s", (id, session['usuario_id']))
+    cur.execute("SELECT * FROM transacoes WHERE id=%s AND usuario_id=%s",
+                (id, session['usuario_id']))
     transacao = cur.fetchone()
     cur.close()
     conn.close()
@@ -157,11 +170,13 @@ def excluir(id):
 
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("DELETE FROM transacoes WHERE id=%s AND usuario_id=%s", (id, session['usuario_id']))
+    cur.execute("DELETE FROM transacoes WHERE id=%s AND usuario_id=%s",
+                (id, session['usuario_id']))
     conn.commit()
     cur.close()
     conn.close()
 
+    flash("Transação excluída!", "danger")
     return redirect(url_for('dashboard'))
 
 
@@ -169,6 +184,7 @@ def excluir(id):
 @app.route('/logout')
 def logout():
     session.clear()
+    flash("Logout realizado com sucesso.", "info")
     return redirect(url_for('login'))
 
 
