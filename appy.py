@@ -1,21 +1,27 @@
 from flask import Flask, render_template, request, redirect, session, url_for
-import sqlite3
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = "chave_segura"
 
-# --- Conexão com o banco ---
+# --- Conexão com PostgreSQL (Render) ---
 def get_db_connection():
-    conn = sqlite3.connect("banco.db")
-    conn.row_factory = sqlite3.Row
+    conn = psycopg2.connect(
+        host="dpg-d3i65ore5dus738rvqj0-a.oregon-postgres.render.com",
+        database="financeiro_db_3egf",
+        user="financeiro_db_3egf_user",
+        password="B1xUwbejZLJzciefomgyKiyBWJ95fuN3",
+        sslmode="require"
+    )
     return conn
 
-# --- Rotas ---
 @app.route('/')
 def index():
     return redirect(url_for('login'))
 
+# --- Cadastro de usuário ---
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
@@ -24,12 +30,16 @@ def register():
         senha = request.form['senha']
 
         conn = get_db_connection()
-        conn.execute("INSERT INTO usuarios (nome, email, senha) VALUES (?, ?, ?)", (nome, email, senha))
+        cur = conn.cursor()
+        cur.execute("INSERT INTO usuarios (nome, email, senha) VALUES (%s, %s, %s)", (nome, email, senha))
         conn.commit()
+        cur.close()
         conn.close()
+
         return redirect(url_for('login'))
     return render_template('register.html')
 
+# --- Login ---
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -37,7 +47,10 @@ def login():
         senha = request.form['senha']
 
         conn = get_db_connection()
-        user = conn.execute("SELECT * FROM usuarios WHERE email=? AND senha=?", (email, senha)).fetchone()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM usuarios WHERE email=%s AND senha=%s", (email, senha))
+        user = cur.fetchone()
+        cur.close()
         conn.close()
 
         if user:
@@ -47,22 +60,25 @@ def login():
             return "Usuário ou senha incorretos!"
     return render_template('login.html')
 
+# --- Dashboard ---
 @app.route('/dashboard')
 def dashboard():
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
 
     conn = get_db_connection()
-    transacoes = conn.execute(
-        "SELECT * FROM transacoes WHERE usuario_id=? ORDER BY data DESC",
-        (session['usuario_id'],)
-    ).fetchall()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("SELECT * FROM transacoes WHERE usuario_id=%s ORDER BY data DESC", (session['usuario_id'],))
+    transacoes = cur.fetchall()
 
     saldo = sum([t['valor'] if t['tipo'] == 'entrada' else -t['valor'] for t in transacoes])
+
+    cur.close()
     conn.close()
 
     return render_template('dashboard.html', transacoes=transacoes, saldo=saldo)
 
+# --- Adicionar transação ---
 @app.route('/add_transacao', methods=['POST'])
 def add_transacao():
     if 'usuario_id' not in session:
@@ -71,15 +87,18 @@ def add_transacao():
     descricao = request.form['descricao']
     valor = float(request.form['valor'])
     tipo = request.form['tipo']
-    data = request.form['data'] if request.form['data'] else datetime.now().strftime('%Y-%m-%d')
+    data = datetime.now()
 
     conn = get_db_connection()
-    conn.execute(
-        "INSERT INTO transacoes (usuario_id, descricao, valor, tipo, data) VALUES (?, ?, ?, ?, ?)",
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO transacoes (usuario_id, descricao, valor, tipo, data) VALUES (%s, %s, %s, %s, %s)",
         (session['usuario_id'], descricao, valor, tipo, data)
     )
     conn.commit()
+    cur.close()
     conn.close()
+
     return redirect(url_for('dashboard'))
 
 # --- Editar transação ---
@@ -89,14 +108,7 @@ def editar(id):
         return redirect(url_for('login'))
 
     conn = get_db_connection()
-    transacao = conn.execute(
-        "SELECT * FROM transacoes WHERE id=? AND usuario_id=?",
-        (id, session['usuario_id'])
-    ).fetchone()
-
-    if not transacao:
-        conn.close()
-        return "Transação não encontrada."
+    cur = conn.cursor(cursor_factory=RealDictCursor)
 
     if request.method == 'POST':
         descricao = request.form['descricao']
@@ -104,15 +116,19 @@ def editar(id):
         tipo = request.form['tipo']
         data = request.form['data']
 
-        conn.execute(
-            "UPDATE transacoes SET descricao=?, valor=?, tipo=?, data=? WHERE id=? AND usuario_id=?",
-            (descricao, valor, tipo, data, id, session['usuario_id'])
-        )
+        cur.execute("""
+            UPDATE transacoes SET descricao=%s, valor=%s, tipo=%s, data=%s WHERE id=%s AND usuario_id=%s
+        """, (descricao, valor, tipo, data, id, session['usuario_id']))
         conn.commit()
+        cur.close()
         conn.close()
         return redirect(url_for('dashboard'))
 
+    cur.execute("SELECT * FROM transacoes WHERE id=%s AND usuario_id=%s", (id, session['usuario_id']))
+    transacao = cur.fetchone()
+    cur.close()
     conn.close()
+
     return render_template('editar.html', transacao=transacao)
 
 # --- Excluir transação ---
@@ -122,11 +138,15 @@ def excluir(id):
         return redirect(url_for('login'))
 
     conn = get_db_connection()
-    conn.execute("DELETE FROM transacoes WHERE id=? AND usuario_id=?", (id, session['usuario_id']))
+    cur = conn.cursor()
+    cur.execute("DELETE FROM transacoes WHERE id=%s AND usuario_id=%s", (id, session['usuario_id']))
     conn.commit()
+    cur.close()
     conn.close()
+
     return redirect(url_for('dashboard'))
 
+# --- Logout ---
 @app.route('/logout')
 def logout():
     session.clear()
