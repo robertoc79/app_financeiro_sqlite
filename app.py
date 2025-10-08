@@ -3,9 +3,15 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
+import os
+
+from backup import backup_bp  # importa o blueprint
 
 app = Flask(__name__)
 app.secret_key = "chave_segura"
+
+app.register_blueprint(backup_bp)  # registra o blueprint DEPOIS
+
 
 # --- Conexão com PostgreSQL (Render) ---
 def get_db_connection():
@@ -87,7 +93,7 @@ def dashboard():
 
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT * FROM transacoes WHERE usuario_id=%s ORDER BY data DESC", (session['usuario_id'],))
+    cur.execute("SELECT * FROM transacoes WHERE usuario_id=%s ORDER BY data ASC", (session['usuario_id'],))
     transacoes = cur.fetchall()
 
     saldo = sum([t['valor'] if t['tipo'] == 'entrada' else -t['valor'] for t in transacoes])
@@ -105,8 +111,18 @@ def add_transacao():
         return redirect(url_for('login'))
 
     descricao = request.form['descricao']
-    valor = float(request.form['valor'])
+    valor = request.form['valor']
     tipo = request.form['tipo']
+
+    if not valor.replace('.', '', 1).isdigit():
+        flash("O valor deve ser numérico.", "danger")
+        return redirect(url_for('dashboard'))
+
+    valor = float(valor)
+    if valor <= 0:
+        flash("O valor deve ser maior que zero.", "danger")
+        return redirect(url_for('dashboard'))
+
     data = datetime.now()
 
     conn = get_db_connection()

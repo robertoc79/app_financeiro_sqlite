@@ -1,7 +1,6 @@
 import os
 import psycopg2
 
-# Conecta ao banco do Render via variável de ambiente
 def get_db_connection():
     db_url = os.getenv("DATABASE_URL")
     if not db_url:
@@ -13,7 +12,7 @@ def create_tables():
     conn = get_db_connection()
     cur = conn.cursor()
 
-    # Criação da tabela de usuários
+    # === TABELA DE USUÁRIOS ===
     cur.execute("""
         CREATE TABLE IF NOT EXISTS usuarios (
             id SERIAL PRIMARY KEY,
@@ -24,7 +23,7 @@ def create_tables():
         );
     """)
 
-    # Criação da tabela de transações
+    # === TABELA DE TRANSAÇÕES ===
     cur.execute("""
         CREATE TABLE IF NOT EXISTS transacoes (
             id SERIAL PRIMARY KEY,
@@ -36,10 +35,20 @@ def create_tables():
         );
     """)
 
+    # === TABELA DE BACKUPS (opcional) ===
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS backups (
+            id SERIAL PRIMARY KEY,
+            usuario_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE,
+            caminho_arquivo TEXT NOT NULL,
+            criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
     conn.commit()
     cur.close()
     conn.close()
-    print("✅ Tabelas criadas com sucesso no PostgreSQL!")
+    print("✅ Todas as tabelas foram criadas ou já existem.")
 
 if __name__ == "__main__":
     create_tables()
