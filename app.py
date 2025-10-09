@@ -93,15 +93,28 @@ def dashboard():
 
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT * FROM transacoes WHERE usuario_id=%s ORDER BY data ASC", (session['usuario_id'],))
+
+    # Pega todas as transações do usuário
+    cur.execute("SELECT * FROM transacoes WHERE usuario_id=%s ORDER BY data DESC", (session['usuario_id'],))
     transacoes = cur.fetchall()
 
-    saldo = sum([t['valor'] if t['tipo'] == 'entrada' else -t['valor'] for t in transacoes])
+    # Calcula total de entradas, saídas e saldo
+    entradas_total = sum([t['valor'] for t in transacoes if t['tipo'] == 'entrada'])
+    saidas_total = sum([t['valor'] for t in transacoes if t['tipo'] == 'saida'])
+    saldo = entradas_total - saidas_total
 
     cur.close()
     conn.close()
 
-    return render_template('dashboard.html', transacoes=transacoes, saldo=saldo, usuario=session.get('usuario_nome'))
+    return render_template(
+        'dashboard.html',
+        transacoes=transacoes,
+        saldo=saldo,
+        entradas_total=entradas_total,
+        saidas_total=saidas_total,
+        usuario=session.get('usuario_nome')
+    )
+
 
 
 # --- Adicionar transação ---
